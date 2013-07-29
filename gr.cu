@@ -5,7 +5,7 @@ __constant__ int numPoints = %d;
   Output is numPoints * 3 array: height, center, standard deviation
   Input frequencies in nm to avoid underflow
 */
-__global__ void gaussReg(float *input, float *output, float *frequencies){
+__global__ void gaussReg(float *input, float *output, float *frequencies, float cutoffPortion){
     input = input + (threadIdx.x + blockDim.x * blockIdx.x) * numFreqs;
     output = output + (threadIdx.x + blockDim.x * blockIdx.x) * 3;
 
@@ -19,7 +19,7 @@ __global__ void gaussReg(float *input, float *output, float *frequencies){
         }
     }
 
-    threshold /= 1e8;
+    threshold *= cutoffPortion;
 
     float s40 = 0, s30 = 0, s20 = 0, s10 = 0, s00 = 0, s21 = 0, s11 = 0, s01 = 0; //quadratic regression stuff
     float logI, frequency;
@@ -72,15 +72,9 @@ __global__ void gaussReg(float *input, float *output, float *frequencies){
         output[0] = output[1] = output[2] = 0;
         return;
     }
-
+    
     output[0] = __expf(c - (b * b) / (4 * a));
     output[1] = -b / scaleFactor / (2 * a) + maxFreq;
     output[2] = sqrtf(-1 / (2 * a)) / scaleFactor;
-    /*
-    output[0] = a;
-    output[1] = b;
-    output[2] = c;
-    */
+    
 }
-
-
