@@ -6,11 +6,12 @@ import pycuda.autoinit
 import os
 from pycuda.compiler import SourceModule
 
-file = open(os.path.dirname(__file__) + '/gr.cu')
+file = open(os.path.dirname(os.path.abspath(__file__)) + '/gr.cu')
 cudaCode = file.read()
 file.close()
 
 mod = SourceModule(cudaCode)
+blockSize = 256
 
 def gaussRegression(data, frequencies):
     '''
@@ -21,9 +22,7 @@ def gaussRegression(data, frequencies):
     data = data.T #change to nfrequency * ndata
     nfrequencies, ndata = data.shape
     out = np.empty((ndata, 3), 'float32')
-    mod = SourceModule(cudaCode %(nfrequencies, ndata))
 
-    blockSize = 512
     gridSize = (ndata + blockSize - 1) / blockSize
     greg = mod.get_function('gaussReg')
 
@@ -43,7 +42,6 @@ def findPeaks(data, frequencies):
     nfrequencies, ndata = data.shape
     out = np.empty(ndata, 'float32')
 
-    blockSize = 512
     gridSize = (ndata + blockSize - 1) / blockSize
 
     cuda.memcpy_htod(mod.get_global('numFreqs')[0], np.int32(nfrequencies))
