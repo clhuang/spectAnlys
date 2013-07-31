@@ -1,7 +1,8 @@
 __constant__ int numFreqs;
 __constant__ int numPoints;
+__constant__ float centerFreq;
 
-__device__ int argMax(float* input) {
+__device__ int argmax(float* input) {
     float max = input[0];
     int best = 0;
     for (int i = 1; i < numFreqs; i++) {
@@ -15,10 +16,10 @@ __device__ int argMax(float* input) {
 }
 
 /**
-  Output is numPoints * 3 array: height, center, standard deviation
-  Input frequencies in nm to avoid underflow
+  Output is numPoints * 3 array: height, center, standard deviation (a*e^(-(x-b)^2/(2c^2)))
+  If quadratic is true, outputs an approximation for the top of the gaussian in the form a(x-b)^2 + c
 */
-__global__ void gaussReg(float *input, float *output, float *frequencies, float cutoffPortion){
+__global__ void reg(float *input, float *output, float *frequencies, float cutoffPortion, bool quadratic){
     int idx = threadIdx.x + blockDim.x * blockIdx.x;
     
     if (idx >= numPoints) return;
@@ -28,39 +29,40 @@ __global__ void gaussReg(float *input, float *output, float *frequencies, float 
 
     float scaleFactor = 1e3 / (frequencies[numFreqs-1] - frequencies[0]);
 
-    int maxI = argMax(input);
+    int maxI = argmax(input);
 
     float threshold = input[maxI] * cutoffPortion;
 
     float s40 = 0, s30 = 0, s20 = 0, s10 = 0, s00 = 0, s21 = 0, s11 = 0, s01 = 0; //quadratic regression stuff
-    float logI, frequency;
+    float yval, frequency;
 
+    //go left from peak, then go right from peak
     for (int i = maxI; i < numFreqs && input[i] > threshold; i++) {
-       logI = __logf(input[i]);
-       frequency = frequencies[i] - frequencies[maxI]; //shift over by maxFreq to avoid floating point errors
+       yval = quadratic ? input[i] / input[maxI] : __logf(input[i]); //in quadratic, divide by input[maxI] to avoid underflow
+       frequency = frequencies[i] - frequencies[maxFreq]; //shift over by maxFreq to avoid floating point errors
        frequency *= scaleFactor; //scale by scaleFactor to avoid underflow/overflow
        s00++;
        s10 += frequency;
        s20 += frequency * frequency;
        s30 += frequency * frequency * frequency;
        s40 += frequency * frequency * frequency * frequency;
-       s01 += logI;
-       s11 += frequency * logI;
-       s21 += frequency * frequency * logI;
+       s01 += yval;
+       s11 += frequency * yval;
+       s21 += frequency * frequency * yval;
     }
     
     for (int i = maxI-1; i > 0 && input[i] > threshold; i--) {
-       logI = __logf(input[i]);
-       frequency = frequencies[i] - frequencies[maxI]; //shift over by maxFreq to avoid floating point errors
+       yval = quadratic ? input[i] / input[maxI] : __logf(input[i]);
+       frequency = frequencies[i] - frequencies[maxFreq]; //shift over by maxFreq to avoid floating point errors
        frequency *= scaleFactor; //scale by scaleFactor to avoid underflow/overflow
        s00++;
        s10 += frequency;
        s20 += frequency * frequency;
        s30 += frequency * frequency * frequency;
        s40 += frequency * frequency * frequency * frequency;
-       s01 += logI;
-       s11 += frequency * logI;
-       s21 += frequency * frequency * logI;
+       s01 += yval;
+       s11 += frequency * yval;
+       s21 += frequency * frequency * yval;
     }
 
     float a, b, c;
@@ -91,15 +93,19 @@ __global__ void gaussReg(float *input, float *output, float *frequencies, float 
 
     //ax^2+bx+c=Ae^((x-b)^2/2c^2)
 
-    if (a > 0) {
+    if (a > 0 || a != a || b != b || c != c) {
         output[0] = output[1] = output[2] = 0;
         return;
     }
-    
-    output[0] = __expf(c - (b * b) / (4 * a));
-    output[1] = -b / scaleFactor / (2 * a) + frequencies[maxI];
-    output[2] = sqrtf(-1 / (2 * a)) / scaleFactor;
-    
+    if (quadratic) { //scalefactors and input[maxI] and frequencies[0] terms are there to fix scaled/shifted values
+        output[0] = a * input[maxI] / scaleFactor;
+        output[1] = -b / scaleFactor / (2 * a) + frequencies[0];
+        output[2] = (c - b * b / (4 * a)) * input[maxI];
+    } else {
+        output[0] = __expf(c - (b * b) / (4 * a));
+        output[1] = -b / scaleFactor / (2 * a) + frequencies[0];
+        output[2] = sqrtf(-1 / (2 * a)) / scaleFactor;
+    }
 }
 
 __global__ void findPeaks(float *input, float *output, float *frequencies) {
@@ -110,7 +116,7 @@ __global__ void findPeaks(float *input, float *output, float *frequencies) {
     input = input + idx * numFreqs;
     output = output + idx;
 
-    int maxI = argMax(input);
+    int maxI = argmax(input);
 
     output[0] = frequencies[maxI];
 }
@@ -123,6 +129,7 @@ __device__ float integrate(float *input, float *frequencies, float lowerbound, f
     if (i >= numFreqs) return 0;
 
     if (i != 0) {
+        //interpolation to find trapezoid size
         width = frequencies[i] - lowerbound;
         h1 = input[i-1] + (lowerbound - frequencies[i-1]) / (frequencies[i] - frequencies[i-1]) * (input[i] - input[i-1]);
         integral += (h1 + input[i]) * width / 2;
@@ -134,6 +141,7 @@ __device__ float integrate(float *input, float *frequencies, float lowerbound, f
 
     if (i >= numFreqs) return integral;
 
+    //interpolation to find trapezoid size
     width = upperbound - frequencies[i-1];
     h1 = input[i-1] + (upperbound - frequencies[i-1]) / (frequencies[i] - frequencies[i-1]) * (input[i] - input[i-1]);
     integral += (h1 + input[i-1]) * width / 2;
@@ -152,13 +160,13 @@ __global__ void integrateLR(float *input, float *output, float *target, float *f
     float targetFrequency = frequencies[idx];
     
     if (left) {
-        *output = integrate(input, frequencies, 0, targetFrequency);
+        *output = integrate(input, frequencies, -INFINITY, targetFrequency);
     } else { //right
         *output = integrate(input, frequencies, targetFrequency, INFINITY);
     }
 }
 
-__global__ void integrateBounds(float *input, float *output, float *bounds, float *frequencies, bool left) {
+__global__ void integrateBounds(float *input, float *output, float *bounds, float *frequencies) {
     int idx = threadIdx.x + blockDim.x * blockIdx.x;
     
     if (idx >= numPoints) return;
@@ -170,4 +178,28 @@ __global__ void integrateBounds(float *input, float *output, float *bounds, floa
     float upperbound = bounds[idx + numPoints];
 
     *output = integrate(input, frequencies, lowerbound, upperbound);
+}
+
+__global__ void fwhm(float *input, float *output, float *frequencies) {
+    int idx = threadIdx.x + blockDim.x * blockIdx.x;
+    
+    if (idx >= numPoints) return;
+
+    input = input + idx * numFreqs;
+    output = output + idx;
+
+    int peak = argmax(input);
+    int halfIntensity = input[peak];
+    float upperbound;
+    float lowerbound;
+
+    int i;
+    for (i = peak; input[i] > halfIntensity && i < numFreqs; i++);
+    upperbound = frequencies[i-1] + (frequencies[i] - frequencies[i-1]) *
+        (halfIntensity - input[i]) / (input[i-1] - input[i]);
+    for (i = peak; input[i] > halfIntensity && i >= 0; i--);
+    lowerbound = frequencies[i] + (frequencies[i+1] - frequencies[i]) *
+        (halfIntensity - input[i]) / (input[i+1] - input[i]);
+
+    *output = upperbound - lowerbound;
 }
