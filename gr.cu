@@ -2,6 +2,7 @@ __constant__ int numFreqs;
 __constant__ int numPoints;
 __constant__ float centerFreq;
 
+/*Finds the index of largest value among the input (size numFreqs)*/
 __device__ int argmax(float* input) {
     float max = input[0];
     int best = 0;
@@ -18,7 +19,8 @@ __device__ int argmax(float* input) {
 __device__ int dCountPeaks(float *input, float *frequencies) {
     int peaks = 0;
     for (int i = 1; i < numFreqs - 1; i++) {
-        if ((input[i] > input[i-1] || (input[i] == input[i-1] && i > 1 && input[i] > input[i-2]))
+        if ((input[i] > input[i-1] ||
+                    (input[i] == input[i-1] && i > 1 && input[i] > input[i-2])) //extra term where y progresses like 1, 4, 4, 2
                 && input[i] > input[i+1]) peaks++;
     }
 
@@ -26,7 +28,9 @@ __device__ int dCountPeaks(float *input, float *frequencies) {
 }
 
 /*Output is numPoints * 3 array: height, center, standard deviation (a*e^(-(x-b)^2/(2c^2)))
-  If quadratic is true, outputs an approximation for the top of the gaussian in the form a(x-b)^2 + c*/
+  Only uses the points surrounding the maximum value where y>ymax*cutoffPortion
+  If quadratic is true, outputs an approximation for the top of the gaussian in the form a(x-b)^2 + c
+  Otherwise outputs gaussian parameters*/
 __global__ void reg(float *input, float *output, float *frequencies, float cutoffPortion, bool quadratic){
     int idx = threadIdx.x + blockDim.x * blockIdx.x;
     
@@ -140,6 +144,7 @@ __global__ void countPeaks(float *input, int *output, float *frequencies) {
     *output = dCountPeaks(input, frequencies);
 }
 
+/*Does a single integration using frequency bounds*/
 __device__ float integrate(float *input, float *frequencies, float lowerbound, float upperbound) {
     int i;
     float integral = 0, width, h1;
@@ -168,6 +173,7 @@ __device__ float integrate(float *input, float *frequencies, float lowerbound, f
     return integral;
 }
 
+/*Integrates everything to the left or right of a particular frequency*/
 __global__ void integrateLR(float *input, float *output, float *target, float *frequencies, bool left) {
     int idx = threadIdx.x + blockDim.x * blockIdx.x;
     
@@ -185,6 +191,7 @@ __global__ void integrateLR(float *input, float *output, float *target, float *f
     }
 }
 
+/*Does integration between bounds, where bounds is a n*2 array*/
 __global__ void integrateBounds(float *input, float *output, float *bounds, float *frequencies) {
     int idx = threadIdx.x + blockDim.x * blockIdx.x;
     

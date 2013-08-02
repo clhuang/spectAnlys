@@ -22,7 +22,6 @@ def dopplerShift(velocity):
     '''
     return centerFreq * velocity * 1e3 / CC
 
-
 def gaussRegression(cutoff=0.5):
     '''
     Does a gaussian regression on the contiguous subset of data
