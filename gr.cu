@@ -39,7 +39,7 @@ __global__ void reg(float *input, float *output, float *frequencies, float cutof
     //go left from peak, then go right from peak
     for (int i = maxI; i < numFreqs && input[i] > threshold; i++) {
        yval = quadratic ? input[i] / input[maxI] : __logf(input[i]); //in quadratic, divide by input[maxI] to avoid underflow
-       frequency = frequencies[i] - frequencies[maxFreq]; //shift over by maxFreq to avoid floating point errors
+       frequency = frequencies[i] - frequencies[0]; //shift over by maxFreq to avoid floating point errors
        frequency *= scaleFactor; //scale by scaleFactor to avoid underflow/overflow
        s00++;
        s10 += frequency;
@@ -53,7 +53,7 @@ __global__ void reg(float *input, float *output, float *frequencies, float cutof
     
     for (int i = maxI-1; i > 0 && input[i] > threshold; i--) {
        yval = quadratic ? input[i] / input[maxI] : __logf(input[i]);
-       frequency = frequencies[i] - frequencies[maxFreq]; //shift over by maxFreq to avoid floating point errors
+       frequency = frequencies[i] - frequencies[0]; //shift over by maxFreq to avoid floating point errors
        frequency *= scaleFactor; //scale by scaleFactor to avoid underflow/overflow
        s00++;
        s10 += frequency;
@@ -65,38 +65,36 @@ __global__ void reg(float *input, float *output, float *frequencies, float cutof
        s21 += frequency * frequency * yval;
     }
 
-    float a, b, c;
+    float a, b, c, q;
     //magical quadratic regression stuff
+    q = (s40*(s20 * s00 - s10 * s10) -
+         s30*(s30 * s00 - s10 * s20) + 
+         s20*(s30 * s10 - s20 * s20));
     a = (s21*(s20 * s00 - s10 * s10) - 
             s11*(s30 * s00 - s10 * s20) + 
             s01*(s30 * s10 - s20 * s20))
-        /
-        (s40*(s20 * s00 - s10 * s10) -
-         s30*(s30 * s00 - s10 * s20) + 
-         s20*(s30 * s10 - s20 * s20));
+        / q;
 
     b = (s40*(s11 * s00 - s01 * s10) - 
             s30*(s21 * s00 - s01 * s20) + 
             s20*(s21 * s10 - s11 * s20))
-        /
-        (s40 * (s20 * s00 - s10 * s10) - 
-         s30 * (s30 * s00 - s10 * s20) + 
-         s20 * (s30 * s10 - s20 * s20));
+        / q;
 
     c = (s40*(s20 * s01 - s10 * s11) - 
             s30*(s30 * s01 - s10 * s21) + 
             s20*(s30 * s11 - s20 * s21))
-        /
-        (s40 * (s20 * s00 - s10 * s10) - 
-         s30 * (s30 * s00 - s10 * s20) + 
-         s20 * (s30 * s10 - s20 * s20));
+        / q;
 
     //ax^2+bx+c=Ae^((x-b)^2/2c^2)
 
-    if (a > 0 || a != a || b != b || c != c) {
+    if (a != a || b != b || c != c) {
         output[0] = output[1] = output[2] = 0;
         return;
     }
+    if (a > 0) {
+        output[0] = output[1] = output[2] = -1;
+    }
+
     if (quadratic) { //scalefactors and input[maxI] and frequencies[0] terms are there to fix scaled/shifted values
         output[0] = a * input[maxI] / scaleFactor;
         output[1] = -b / scaleFactor / (2 * a) + frequencies[0];
