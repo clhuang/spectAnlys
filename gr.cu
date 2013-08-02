@@ -15,10 +15,18 @@ __device__ int argmax(float* input) {
     return best;
 }
 
-/**
-  Output is numPoints * 3 array: height, center, standard deviation (a*e^(-(x-b)^2/(2c^2)))
-  If quadratic is true, outputs an approximation for the top of the gaussian in the form a(x-b)^2 + c
-*/
+__device__ int dCountPeaks(float *input, float *frequencies) {
+    int peaks = 0;
+    for (int i = 1; i < numFreqs - 1; i++) {
+        if ((input[i] > input[i-1] || (input[i] == input[i-1] && i > 1 && input[i] > input[i-2]))
+                && input[i] > input[i+1]) peaks++;
+    }
+
+    return peaks;
+}
+
+/*Output is numPoints * 3 array: height, center, standard deviation (a*e^(-(x-b)^2/(2c^2)))
+  If quadratic is true, outputs an approximation for the top of the gaussian in the form a(x-b)^2 + c*/
 __global__ void reg(float *input, float *output, float *frequencies, float cutoffPortion, bool quadratic){
     int idx = threadIdx.x + blockDim.x * blockIdx.x;
     
@@ -106,6 +114,7 @@ __global__ void reg(float *input, float *output, float *frequencies, float cutof
     }
 }
 
+/*Finds the absolute peak values of the function.*/
 __global__ void findPeaks(float *input, float *output, float *frequencies) {
     int idx = threadIdx.x + blockDim.x * blockIdx.x;
     
@@ -119,6 +128,7 @@ __global__ void findPeaks(float *input, float *output, float *frequencies) {
     output[0] = frequencies[maxI];
 }
 
+/*Counts the number of peaks, where d2y/df2 < 0 and dy/df=0*/
 __global__ void countPeaks(float *input, int *output, float *frequencies) {
     int idx = threadIdx.x + blockDim.x * blockIdx.x;
     
@@ -127,12 +137,7 @@ __global__ void countPeaks(float *input, int *output, float *frequencies) {
     input += idx * numFreqs;
     output += idx;
 
-    int peaks = 0;
-    for (int i = 1; i < numFreqs - 1; i++) {
-        if (input[i] > input[i-1] && input[i] > input[i+1]) peaks++;
-    }
-
-    *output = peaks;
+    *output = dCountPeaks(input, frequencies);
 }
 
 __device__ float integrate(float *input, float *frequencies, float lowerbound, float upperbound) {
@@ -194,6 +199,7 @@ __global__ void integrateBounds(float *input, float *output, float *bounds, floa
     *output = integrate(input, frequencies, lowerbound, upperbound);
 }
 
+/* Finds the width of the profile at half maximum.*/
 __global__ void fwhm(float *input, float *output, float *frequencies) {
     int idx = threadIdx.x + blockDim.x * blockIdx.x;
     
