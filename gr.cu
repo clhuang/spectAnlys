@@ -119,6 +119,22 @@ __global__ void findPeaks(float *input, float *output, float *frequencies) {
     output[0] = frequencies[maxI];
 }
 
+__global__ void countPeaks(float *input, int *output, float *frequencies) {
+    int idx = threadIdx.x + blockDim.x * blockIdx.x;
+    
+    if (idx >= numPoints) return;
+
+    input += idx * numFreqs;
+    output += idx;
+
+    int peaks = 0;
+    for (int i = 1; i < numFreqs - 1; i++) {
+        if (input[i] > input[i-1] && input[i] > input[i+1]) peaks++;
+    }
+
+    *output = peaks;
+}
+
 __device__ float integrate(float *input, float *frequencies, float lowerbound, float upperbound) {
     int i;
     float integral = 0, width, h1;

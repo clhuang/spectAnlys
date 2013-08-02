@@ -89,6 +89,28 @@ def findPeaks():
 
     return out.reshape(datashape)
 
+def numPeaks():
+    '''
+    Returns an array with size of dataset, with numbers of peaks
+    '''
+    __checksize()
+    if (frequencies.size != nfrequencies):
+        raise Exception('dFreq array must have same dimension as last dim of dat')
+    out = np.empty(ndata, 'int32')
+
+    gridSize = (ndata + blockSize - 1) / blockSize
+
+    cuda.memcpy_htod(mod.get_global('numFreqs')[0], np.int32(nfrequencies))
+    cuda.memcpy_htod(mod.get_global('numPoints')[0], np.int32(ndata))
+    cuda.memcpy_htod(mod.get_global('centerFreq')[0], np.float32(centerFreq))
+
+    fp = mod.get_function('countPeaks')
+
+    fp(cuda.In(data.astype('float32')), cuda.Out(out), cuda.In(frequencies.astype('float32')),
+            block=(blockSize,1,1), grid=(gridSize,1,1))
+
+    return out.reshape(datashape)
+
 def splitIntegral(windowSeparation, windowWidth, nWindows):
     '''
     Integrates within a set of windows throughout the frequency range.
