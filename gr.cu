@@ -182,17 +182,18 @@ __global__ void integrateLR(float *input, float *output, float *target, float *f
     input = input + idx * numFreqs;
     output = output + idx;
 
-    float targetFrequency = frequencies[idx];
+    float targetFrequency = target[idx];
     float boundFrequency;
 
     int end;
+    for (end = 0; frequencies[end] < targetFrequency; end++); //end is frequency position of target
     
     if (left) {
-        for (end = idx; end >= 0 && input[end] > 0; end--);
+        for (; end >= 0 && input[end] > 0; end--);
         boundFrequency = end >= 0 ? frequencies[end] : -INFINITY;
         *output = integrate(input, frequencies, boundFrequency, targetFrequency);
     } else { //right
-        for (end = idx; end < numFreqs && input[end] > 0; end++);
+        for (; end < numFreqs && input[end] > 0; end++);
         boundFrequency = end < numFreqs ? frequencies[end] : INFINITY;
         *output = integrate(input, frequencies, targetFrequency, boundFrequency);
     }

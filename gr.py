@@ -181,6 +181,33 @@ def splitIntegralV(vSeparation, vWidth, nWindows):
     '''
     return splitIntegral(dopplerShift(vSeparation), dopplerShift(vWidth), nWindows)
 
+def lrIntegral(left):
+    '''
+    Performs an integral from the peak to the left/rightmost bound of the gaussian
+    or to the first instance of a 0/negative number, whichever comes first.
+    If left is False, does the integral on the right;
+    if True does the integral on the left.
+    '''
+    __checksize()
+    gridSize = (ndata + blockSize - 1) / blockSize
+
+    cuda.memcpy_htod(mod.get_global('numFreqs')[0], np.int32(nfrequencies))
+    cuda.memcpy_htod(mod.get_global('numPoints')[0], np.int32(ndata))
+    cuda.memcpy_htod(mod.get_global('centerFreq')[0], np.float32(centerFreq))
+
+    out = np.empty((ndata), dtype='float32')
+    integrate = mod.get_function('integrateLR')
+
+#     peakFreqs = findPeaks()
+    peakFreqs = quadRegressionC()
+
+    integrate(cuda.In(data.astype('float32')), cuda.Out(out),
+            cuda.In(peakFreqs.astype('float32')), cuda.In(frequencies.astype('float32')),
+            np.int8(left),
+            block=(blockSize,1,1), grid=(gridSize,1,1))
+
+    return out.reshape(datashape)
+
 def setData(data, dFreqs, center):
     '''
     dat is an ndata*nfrequency array
