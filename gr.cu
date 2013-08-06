@@ -39,7 +39,7 @@ __global__ void reg(float *input, float *output, float *frequencies, float cutof
     input += idx * numFreqs;
     output += idx * 3;
 
-    float scaleFactor = 1e3 / (frequencies[numFreqs-1] - frequencies[0]);
+    float scaleFactor = 1e3 / (frequencies[numFreqs-1] - frequencies[0]); //avoid float overflow, just scale things
 
     int maxI = argmax(input);
 
@@ -104,7 +104,7 @@ __global__ void reg(float *input, float *output, float *frequencies, float cutof
         return;
     }
     if (a > 0) {
-        output[0] = output[1] = output[2] = -1;
+        output[0] = output[1] = output[2] = 0;
     }
 
     if (quadratic) { //scalefactors and input[maxI] and frequencies[0] terms are there to fix scaled/shifted values
@@ -150,7 +150,7 @@ __device__ float integrate(float *input, float *frequencies, float lowerbound, f
     float integral = 0, width, h1;
 
     for (i = 0; frequencies[i] < lowerbound && i < numFreqs; i++);
-    if (i >= numFreqs) return 0;
+    if (i == numFreqs) return 0;
 
     if (i != 0) {
         //interpolation to find trapezoid size
@@ -163,7 +163,7 @@ __device__ float integrate(float *input, float *frequencies, float lowerbound, f
         integral += (input[i] + input[i-1]) * (frequencies[i] - frequencies[i-1]) / 2;
     }
 
-    if (i >= numFreqs) return integral;
+    if (i == numFreqs) return integral;
 
     //interpolation to find trapezoid size
     width = upperbound - frequencies[i-1];
@@ -173,7 +173,7 @@ __device__ float integrate(float *input, float *frequencies, float lowerbound, f
     return integral;
 }
 
-/*Integrates everything to the left or right of a particular frequency*/
+/*Integrates everything to the left or right of a particular frequency until input hits 0*/
 __global__ void integrateLR(float *input, float *output, float *target, float *frequencies, bool left) {
     int idx = threadIdx.x + blockDim.x * blockIdx.x;
     
@@ -183,11 +183,18 @@ __global__ void integrateLR(float *input, float *output, float *target, float *f
     output = output + idx;
 
     float targetFrequency = frequencies[idx];
+    float boundFrequency;
+
+    int end;
     
     if (left) {
-        *output = integrate(input, frequencies, -INFINITY, targetFrequency);
+        for (end = idx; end >= 0 && input[end] > 0; end--);
+        boundFrequency = end >= 0 ? frequencies[end] : -INFINITY;
+        *output = integrate(input, frequencies, boundFrequency, targetFrequency);
     } else { //right
-        *output = integrate(input, frequencies, targetFrequency, INFINITY);
+        for (end = idx; end < numFreqs && input[end] > 0; end++);
+        boundFrequency = end < numFreqs ? frequencies[end] : INFINITY;
+        *output = integrate(input, frequencies, targetFrequency, boundFrequency);
     }
 }
 
@@ -216,11 +223,12 @@ __global__ void fwhm(float *input, float *output, float *frequencies) {
     output = output + idx;
 
     int peak = argmax(input);
-    int halfIntensity = input[peak];
-    float upperbound;
-    float lowerbound;
+    float halfIntensity = input[peak] / 2;
+    float upperbound = 0;
+    float lowerbound = 0;
 
     int i;
+
     for (i = peak; input[i] > halfIntensity && i < numFreqs; i++);
     upperbound = frequencies[i-1] + (frequencies[i] - frequencies[i-1]) *
         (halfIntensity - input[i]) / (input[i-1] - input[i]);
@@ -228,5 +236,8 @@ __global__ void fwhm(float *input, float *output, float *frequencies) {
     lowerbound = frequencies[i] + (frequencies[i+1] - frequencies[i]) *
         (halfIntensity - input[i]) / (input[i+1] - input[i]);
 
-    *output = upperbound - lowerbound;
+    if (upperbound != upperbound || lowerbound != lowerbound)
+        *output = 0;
+    else
+        *output = upperbound - lowerbound;
 }

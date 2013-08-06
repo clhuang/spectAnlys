@@ -66,13 +66,23 @@ def quadRegression(cutoff=0.5):
 
     return out.reshape(datashape + (3,))
 
+def gaussRegressionC(cutoff=0.5):
+    '''
+    Returns the centers predicted by a gaussian regression.
+    '''
+    return gaussRegression(cutoff)[...,1]
+
+def quadRegressionC(cutoff=0.5):
+    '''
+    Returns the centers predicted by a quadratic regression.
+    '''
+    return quadRegression(cutoff)[...,1]
+
 def findPeaks():
     '''
     Returns an array with size of dataset, with locations of frequency peaks.
     '''
     __checksize()
-    if (frequencies.size != nfrequencies):
-        raise Exception('dFreq array must have same dimension as last dim of dat')
     out = np.empty(ndata, 'float32')
 
     gridSize = (ndata + blockSize - 1) / blockSize
@@ -93,8 +103,6 @@ def numPeaks():
     Returns an array with size of dataset, with numbers of peaks
     '''
     __checksize()
-    if (frequencies.size != nfrequencies):
-        raise Exception('dFreq array must have same dimension as last dim of dat')
     out = np.empty(ndata, 'int32')
 
     gridSize = (ndata + blockSize - 1) / blockSize
@@ -104,6 +112,26 @@ def numPeaks():
     cuda.memcpy_htod(mod.get_global('centerFreq')[0], np.float32(centerFreq))
 
     fp = mod.get_function('countPeaks')
+
+    fp(cuda.In(data.astype('float32')), cuda.Out(out), cuda.In(frequencies.astype('float32')),
+            block=(blockSize,1,1), grid=(gridSize,1,1))
+
+    return out.reshape(datashape)
+
+def fwhm():
+    '''
+    Returns an array with size of dataset, with width of each peak
+    '''
+    __checksize()
+    out = np.empty(ndata, 'float32')
+
+    gridSize = (ndata + blockSize - 1) / blockSize
+
+    cuda.memcpy_htod(mod.get_global('numFreqs')[0], np.int32(nfrequencies))
+    cuda.memcpy_htod(mod.get_global('numPoints')[0], np.int32(ndata))
+    cuda.memcpy_htod(mod.get_global('centerFreq')[0], np.float32(centerFreq))
+
+    fp = mod.get_function('fwhm')
 
     fp(cuda.In(data.astype('float32')), cuda.Out(out), cuda.In(frequencies.astype('float32')),
             block=(blockSize,1,1), grid=(gridSize,1,1))
