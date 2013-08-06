@@ -6,7 +6,7 @@ import pycuda.autoinit
 import os
 from pycuda.compiler import SourceModule
 
-file = open(os.path.dirname(os.path.abspath(__file__)) + '/gr.cu')
+file = open(os.path.dirname(os.path.abspath(__file__)) + '/sa.cu')
 cudaCode = file.read()
 file.close()
 
@@ -38,7 +38,7 @@ def gaussRegression(cutoff=0.5):
     cuda.memcpy_htod(mod.get_global('numPoints')[0], np.int32(ndata))
     cuda.memcpy_htod(mod.get_global('centerFreq')[0], np.float32(centerFreq))
 
-    greg(cuda.In(data.astype('float32')), cuda.Out(out), cuda.In(frequencies.astype('float32')),
+    greg(cuda.In(data), cuda.Out(out), cuda.In(frequencies),
             np.float32(cutoff), np.int8(False),
             block=(blockSize,1,1), grid=(gridSize,1,1))
 
@@ -60,7 +60,7 @@ def quadRegression(cutoff=0.5):
     cuda.memcpy_htod(mod.get_global('numPoints')[0], np.int32(ndata))
     cuda.memcpy_htod(mod.get_global('centerFreq')[0], np.float32(centerFreq))
 
-    greg(cuda.In(data.astype('float32')), cuda.Out(out), cuda.In(frequencies.astype('float32')),
+    greg(cuda.In(data), cuda.Out(out), cuda.In(frequencies),
             np.float32(cutoff), np.int8(True),
             block=(blockSize,1,1), grid=(gridSize,1,1))
 
@@ -93,7 +93,7 @@ def findPeaks():
 
     fp = mod.get_function('findPeaks')
 
-    fp(cuda.In(data.astype('float32')), cuda.Out(out), cuda.In(frequencies.astype('float32')),
+    fp(cuda.In(data), cuda.Out(out), cuda.In(frequencies),
             block=(blockSize,1,1), grid=(gridSize,1,1))
 
     return out.reshape(datashape)
@@ -113,7 +113,7 @@ def numPeaks():
 
     fp = mod.get_function('countPeaks')
 
-    fp(cuda.In(data.astype('float32')), cuda.Out(out), cuda.In(frequencies.astype('float32')),
+    fp(cuda.In(data), cuda.Out(out), cuda.In(frequencies),
             block=(blockSize,1,1), grid=(gridSize,1,1))
 
     return out.reshape(datashape)
@@ -133,7 +133,7 @@ def fwhm():
 
     fp = mod.get_function('fwhm')
 
-    fp(cuda.In(data.astype('float32')), cuda.Out(out), cuda.In(frequencies.astype('float32')),
+    fp(cuda.In(data), cuda.Out(out), cuda.In(frequencies),
             block=(blockSize,1,1), grid=(gridSize,1,1))
 
     return out.reshape(datashape)
@@ -163,8 +163,8 @@ def splitIntegral(windowSeparation, windowWidth, nWindows):
 
     for _ in range(nWindows):
         bounds = np.concatenate((lowerBounds, upperBounds))
-        integrate(cuda.In(data.astype('float32')), cuda.Out(temp),
-                cuda.In(bounds.astype('float32')), cuda.In(frequencies.astype('float32')),
+        integrate(cuda.In(data), cuda.Out(temp),
+                cuda.In(bounds), cuda.In(frequencies),
                 block=(blockSize,1,1), grid=(gridSize,1,1))
 
         out = np.concatenate((out, temp), 1)
@@ -201,8 +201,8 @@ def lrIntegral(left):
 #     peakFreqs = findPeaks()
     peakFreqs = quadRegressionC()
 
-    integrate(cuda.In(data.astype('float32')), cuda.Out(out),
-            cuda.In(peakFreqs.astype('float32')), cuda.In(frequencies.astype('float32')),
+    integrate(cuda.In(data), cuda.Out(out),
+            cuda.In(np.ascontiguousarray(peakFreqs)), cuda.In(frequencies),
             np.int8(left),
             block=(blockSize,1,1), grid=(gridSize,1,1))
 
@@ -214,17 +214,17 @@ def setData(data, dFreqs, center):
     '''
     global dat, centerFreq, freqs, datashape
     datashape=data.shape[:-1]
-    dat = data.reshape((-1, data.shape[-1])).T
-    freqs = dFreqs
+    dat = data.reshape((-1, data.shape[-1])).astype('float32')
+    freqs = dFreqs.astype('float32')
     centerFreq = center
     setSkipSize(1)
 
 def setSkipSize(skipSize):
     global data, frequencies, nfrequencies, ndata
-    nfreq, ndata = dat.shape
+    ndata, nfreq = dat.shape
     nfrequencies = (nfreq + skipSize - 1) / skipSize
-    data = dat[::skipSize]
-    frequencies = freqs[::skipSize]
+    data = np.ascontiguousarray(dat[:,::skipSize])
+    frequencies = np.ascontiguousarray(freqs[::skipSize])
 
 def __checksize():
     if (nfrequencies != frequencies.size):
