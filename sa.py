@@ -22,6 +22,12 @@ def dopplerShift(velocity):
     '''
     return centerFreq * velocity * 1e3 / CC
 
+def velocityShift(dFreqs):
+    '''
+    converts frequency shifts to relative velocities
+    '''
+    return dFreqs / centerFreq / 1e3 * CC
+
 def gaussRegression(cutoff=0.5):
     '''
     Does a gaussian regression on the contiguous subset of data
@@ -220,6 +226,10 @@ def setData(data, dFreqs, center):
     setSkipSize(1)
 
 def setSkipSize(skipSize):
+    '''
+    Only takes every n data points.
+    For testing purposes, do not use on actual data.
+    '''
     global data, frequencies, nfrequencies, ndata
     ndata, nfreq = dat.shape
     nfrequencies = (nfreq + skipSize - 1) / skipSize
