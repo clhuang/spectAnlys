@@ -173,8 +173,8 @@ __device__ float integrate(float *input, float *frequencies, float lowerbound, f
     return integral;
 }
 
-/*Integrates everything to the left or right of a particular frequency until input hits 0*/
-__global__ void integrateLR(float *input, float *output, float *target, float *frequencies, bool left) {
+/*Integrates everything to the left or right of a particular frequency until input hits limit * input[target]*/
+__global__ void integrateLR(float *input, float *output, float *target, float *frequencies, float limit, bool left) {
     int idx = threadIdx.x + blockDim.x * blockIdx.x;
     
     if (idx >= numPoints) return;
@@ -187,13 +187,15 @@ __global__ void integrateLR(float *input, float *output, float *target, float *f
 
     int end;
     for (end = 0; frequencies[end] < targetFrequency; end++); //end is frequency position of target
+
+    limit *= input[end]; //set limit input value
     
     if (left) {
-        for (; end >= 0 && input[end] > 0; end--);
+        for (; end >= 0 && input[end] > limit; end--);
         boundFrequency = end >= 0 ? frequencies[end] : -INFINITY;
         *output = integrate(input, frequencies, boundFrequency, targetFrequency);
     } else { //right
-        for (; end < numFreqs && input[end] > 0; end++);
+        for (; end < numFreqs && input[end] > limit; end++);
         boundFrequency = end < numFreqs ? frequencies[end] : INFINITY;
         *output = integrate(input, frequencies, targetFrequency, boundFrequency);
     }

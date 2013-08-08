@@ -187,7 +187,7 @@ def splitIntegralV(vSeparation, vWidth, nWindows):
     '''
     return splitIntegral(dopplerShift(vSeparation), dopplerShift(vWidth), nWindows)
 
-def lrIntegral(left):
+def lrIntegral(left, limit=.1):
     '''
     Performs an integral from the peak to the left/rightmost bound of the gaussian
     or to the first instance of a 0/negative number, whichever comes first.
@@ -209,7 +209,7 @@ def lrIntegral(left):
 
     integrate(cuda.In(data), cuda.Out(out),
             cuda.In(np.ascontiguousarray(peakFreqs)), cuda.In(frequencies),
-            np.int8(left),
+            np.float32(limit), np.int8(left),
             block=(blockSize,1,1), grid=(gridSize,1,1))
 
     return out.reshape(datashape)
