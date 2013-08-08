@@ -28,7 +28,7 @@ def velocityShift(dFreqs):
     '''
     return dFreqs / centerFreq / 1e3 * CC
 
-def gaussRegression(cutoff=0.5):
+def gaussRegression(cutoff=0.25):
     '''
     Does a gaussian regression on the contiguous subset of data
     containing ymax where y>ymax*cutoff.
@@ -50,7 +50,7 @@ def gaussRegression(cutoff=0.5):
 
     return out.reshape(datashape + (3,))
 
-def quadRegression(cutoff=0.5):
+def quadRegression(cutoff=0.25):
     '''
     Does a quadratic regression on the contiguous subset of data
     containing ymax where y>ymax*cutoff.
@@ -72,13 +72,13 @@ def quadRegression(cutoff=0.5):
 
     return out.reshape(datashape + (3,))
 
-def gaussRegressionC(cutoff=0.5):
+def gaussRegressionC(cutoff=0.25):
     '''
     Returns the centers predicted by a gaussian regression.
     '''
     return gaussRegression(cutoff)[...,1]
 
-def quadRegressionC(cutoff=0.5):
+def quadRegressionC(cutoff=0.25):
     '''
     Returns the centers predicted by a quadratic regression.
     '''
