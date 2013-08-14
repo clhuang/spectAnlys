@@ -1,14 +1,13 @@
 import math as m
 import numpy as np
-import pycuda.gpuarray as gpuarray
 import pycuda.driver as cuda
 import pycuda.autoinit
 import os
 from pycuda.compiler import SourceModule
 
-file = open(os.path.dirname(os.path.abspath(__file__)) + '/sa.cu')
-cudaCode = file.read()
-file.close()
+kernelfile = open(os.path.dirname(os.path.abspath(__file__)) + '/sa.cu')
+cudaCode = kernelfile.read()
+kernelfile.close()
 
 CC = 3e8
 
