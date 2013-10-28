@@ -1,4 +1,3 @@
-import math as m
 import numpy as np
 import pycuda.driver as cuda
 import pycuda.autoinit
@@ -12,6 +11,7 @@ KERNELFILE.close()
 CC = 3e8
 
 BLOCKSIZE = 256
+
 
 class Analyzer:
     dat = None  # raw data
@@ -55,8 +55,8 @@ class Analyzer:
         self._copy_size_to_gpu()
 
         greg(cuda.In(self.data), cuda.Out(out), cuda.In(self.frequencies),
-                np.float32(cutoff), np.int8(False),
-                block=(BLOCKSIZE,1,1), grid=(grid_size,1,1))
+             np.float32(cutoff), np.int8(False),
+             block=(BLOCKSIZE, 1, 1), grid=(grid_size, 1, 1))
 
         return out.reshape(self.datashape + (3,))
 
@@ -75,8 +75,8 @@ class Analyzer:
         self._copy_size_to_gpu()
 
         greg(cuda.In(self.data), cuda.Out(out), cuda.In(self.frequencies),
-                np.float32(cutoff), np.int8(True),
-                block=(BLOCKSIZE,1,1), grid=(grid_size,1,1))
+             np.float32(cutoff), np.int8(True),
+             block=(BLOCKSIZE, 1, 1), grid=(grid_size, 1, 1))
 
         return out.reshape(self.datashape + (3,))
 
@@ -106,7 +106,7 @@ class Analyzer:
         findpeaks = self.mod.get_function('findPeaks')
 
         findpeaks(cuda.In(self.data), cuda.Out(out), cuda.In(self.frequencies),
-                block=(BLOCKSIZE,1,1), grid=(grid_size,1,1))
+                  block=(BLOCKSIZE, 1, 1), grid=(grid_size, 1, 1))
 
         return out.reshape(self.datashape)
 
@@ -124,7 +124,7 @@ class Analyzer:
         countpeaks = self.mod.get_function('countPeaks')
 
         countpeaks(cuda.In(self.data), cuda.Out(out), cuda.In(self.frequencies),
-                block=(BLOCKSIZE,1,1), grid=(grid_size,1,1))
+                   block=(BLOCKSIZE, 1, 1), grid=(grid_size, 1, 1))
 
         return out.reshape(self.datashape)
 
@@ -142,7 +142,7 @@ class Analyzer:
         calcfwhm = self.mod.get_function('fwhm')
 
         calcfwhm(cuda.In(self.data), cuda.Out(out), cuda.In(self.frequencies),
-                block=(BLOCKSIZE,1,1), grid=(grid_size,1,1))
+                 block=(BLOCKSIZE, 1, 1), grid=(grid_size, 1, 1))
 
         return out.reshape(self.datashape)
 
@@ -170,8 +170,8 @@ class Analyzer:
         for _ in range(nwindows):
             bounds = np.concatenate((lower_bounds, upper_bounds))
             integrate(cuda.In(self.data), cuda.Out(temp),
-                    cuda.In(bounds), cuda.In(self.frequencies),
-                    block=(BLOCKSIZE,1,1), grid=(grid_size,1,1))
+                      cuda.In(bounds), cuda.In(self.frequencies),
+                      block=(BLOCKSIZE, 1, 1), grid=(grid_size, 1, 1))
 
             out = np.concatenate((out, temp), 1)
 
@@ -204,9 +204,9 @@ class Analyzer:
         peak_freqs = self.quad_reg()
 
         integrate(cuda.In(self.data), cuda.Out(out),
-                cuda.In(np.ascontiguousarray(peak_freqs)), cuda.In(self.frequencies),
-                np.float32(limit), np.int8(left),
-                block=(BLOCKSIZE,1,1), grid=(grid_size,1,1))
+                  cuda.In(np.ascontiguousarray(peak_freqs)), cuda.In(self.frequencies),
+                  np.float32(limit), np.int8(left),
+                  block=(BLOCKSIZE, 1, 1), grid=(grid_size, 1, 1))
 
         return out.reshape(self.datashape)
 
