@@ -23,8 +23,9 @@ class Analyzer:
     center_freq = 0
     datashape = None
 
-    def __init__(self, data, dfreqs, center):
-        self.set_data(data, dfreqs, center)
+    def __init__(self, data=None, dfreqs=None, center=None):
+        if data is not None:
+            self.set_data(data, dfreqs, center)
         self.mod = SourceModule(CUDACODE)
 
     def dopp_shift(self, velocity):
