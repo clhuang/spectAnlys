@@ -99,11 +99,6 @@ __global__ void reg(float *input, float *output, float *frequencies, float cutof
         / q;
 
     //ax^2+bx+c=Ae^((x-b)^2/2c^2)
-    if (a != a || b != b || c != c) {
-        output[0] = output[1] = output[2] = 0;
-        return;
-    }
-
     if (a > 0) {
         output[0] = output[1] = output[2] = 0;
     }
@@ -116,6 +111,11 @@ __global__ void reg(float *input, float *output, float *frequencies, float cutof
         output[0] = __expf(c - (b * b) / (4 * a));
         output[1] = -b / scaleFactor / (2 * a) + frequencies[0];
         output[2] = sqrtf(-1 / (2 * a)) / scaleFactor;
+    }
+
+    if (!isfinite(a) || !isfinite(b) || !isfinite(c)) {
+        output[0] = output[1] = output[2] = 0;
+        return;
     }
 }
 
